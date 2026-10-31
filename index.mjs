@@ -213,7 +213,7 @@ export async function SenseNovaPlugin({ client } = {}, options = {}) {
       cfg.provider ??= {};
       const was = cfg.provider[PROVIDER] ?? {};
       cfg.provider[PROVIDER] = {
-        name: "SenseNova",
+        name: "商汤日日新",
         npm: NPM,
         api: opts.baseURL ?? "https://token.sensenova.cn/v1",
         ...was,
