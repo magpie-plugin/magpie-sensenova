@@ -198,18 +198,20 @@ the current API key before the request leaves:
 async fetch(input, init) {
   const headers = new Headers(init?.headers ?? source?.headers);
   headers.set("authorization", `Bearer ${current}`);
-  return fetch(new Request(source, { ...init, headers }));   // body passes through
+  const clean = await rewriteChatBody(input, init, headers);   // shapes the gateway rejects get an in-memory equivalent rewrite
+  return fetch(clean?.input ?? source, clean?.init ?? { ...init, headers });
 }
 ```
 
 So by capability it **is positioned to see your entire conversation, your tool calls, and their
 results.**
 
-What the code actually does: **it reads headers and rewrites the single `authorization` field**, does not
-read the request body (the `body` is carried through by `{...init}`), does not write the content
-anywhere, does not cache prompts or responses, and does not send anything to a host outside the list in
-6. **But that is the code restraining itself, not isolation granted by the platform** — you can only
-confirm it by reading the code, and Magpie cannot guarantee it for you.
+What the code actually does: **it reads headers and rewrites the single `authorization` field**; the body
+only passes through `sanitize.mjs` in memory — OpenAI-legal shapes the SenseNova gateway rejects (the
+`developer` role, `content: null`, object-form `tool_calls` arguments, …) get a semantically equivalent
+rewrite that is discarded once sent. It does not cache prompts or responses, and does not send anything
+to a host outside the list in 6. **But that is the code restraining itself, not isolation granted by the
+platform** — you can only confirm it by reading the code, and Magpie cannot guarantee it for you.
 
 Three facts about Magpie's plugin mechanism decide how much that restraint is worth:
 
@@ -258,7 +260,8 @@ through 4 go away with it.
 - It does not request, rotate, or revoke your API keys.
 - It does not change your SenseNova account settings.
 - It does not read, log, or forward your model request content — it rewrites the single `authorization`
-  header and passes the body through to `token.sensenova.cn` (see the code in 7).
+  header; the body only passes through the in-memory gateway-schema sanitiser (`sanitize.mjs`) and is
+  discarded once sent.
 - It does not cache prompts or responses.
 - It does not write to any credential setting on SenseNova's servers.
 - It writes to `~/.sensenova-quota.json` only its own per-account entries (`accounts.<account>`) plus,

@@ -39,6 +39,7 @@ import {
   writeCredentials,
 } from "./quota.mjs";
 import { fill, resolveLocale, strings as tableFor } from "./i18n.mjs";
+import { rewriteChatBody } from "./sanitize.mjs";
 
 const DEFAULT_QUOTA_TTL_MS = 60_000;
 
@@ -245,8 +246,11 @@ export async function SenseNovaPlugin({ client } = {}, options = {}) {
       /**
        * The account, resolved into request routing.
        *
-       * There is no body repair here — unlike a gateway that rejects an empty
-       * `tools` array, Token Plan accepts the OpenAI shapes as sent.
+       * The body is not forwarded blindly: the Token Plan gateway's schema
+       * validation rejects several legal OpenAI shapes (`developer` role,
+       * null content, object `tool_calls` arguments, …), so those get the
+       * semantically equivalent rewrite from `sanitize.mjs` first. Everything
+       * else — GETs, non-JSON bodies, already-clean requests — passes as sent.
        */
       async loader(getAuth) {
         const key = apiKeyOf(await readAuth(getAuth));
@@ -261,6 +265,11 @@ export async function SenseNovaPlugin({ client } = {}, options = {}) {
             const headers = new Headers(init?.headers ?? source?.headers);
             if (current === undefined) headers.delete("authorization");
             else headers.set("authorization", `Bearer ${current}`);
+            const clean = await rewriteChatBody(input, init, headers);
+            if (clean) {
+              log("info", `sensenova: rewrote ${clean.changes.join(", ")} for the gateway`);
+              return fetch(clean.input, clean.init);
+            }
             // A Request carries its own body, and re-issuing one by URL alone
             // silently drops it — so clone it instead of rebuilding the call.
             if (source) return fetch(new Request(source, { ...init, headers }));

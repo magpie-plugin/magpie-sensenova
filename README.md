@@ -141,13 +141,14 @@ Magpie 官方文档的 FAQ 里有这么一条：
 async fetch(input, init) {
   const headers = new Headers(init?.headers ?? source?.headers);
   headers.set("authorization", `Bearer ${current}`);
-  return fetch(new Request(source, { ...init, headers }));   // body 原样透传
+  const clean = await rewriteChatBody(input, init, headers);   // 商汤网关拒收的写法在内存里等价改写
+  return fetch(clean?.input ?? source, clean?.init ?? { ...init, headers });
 }
 ```
 
 所以从能力上讲，它**处在能看到你全部对话、工具调用及其结果的位置上。**
 
-代码的实际行为：**只读请求头、只改写 `authorization` 这一个字段**，不读请求体（`body` 由 `{...init}` 透传），不把内容写到任何地方，不缓存提示词或响应，也不向第 6 条列出的主机之外发送任何数据。**但这是代码的自我约束，不是平台给的隔离**——你只能靠读代码确认，Magpie 不能替你保证。
+代码的实际行为：**只读请求头、改写 `authorization` 这一个字段**；请求体只在内存里过一遍 `sanitize.mjs`——把商汤网关拒收的 OpenAI 合法写法（`developer` 角色、`content: null`、对象形式的 `tool_calls` 参数等）语义等价地改写掉，改写后的 body 即发即弃，不缓存提示词或响应，不向第 6 条列出的主机之外发送任何数据。**但这是代码的自我约束，不是平台给的隔离**——你只能靠读代码确认，Magpie 不能替你保证。
 
 关于 Magpie 的插件机制，有三个事实决定这份约束值多少：
 
@@ -178,7 +179,7 @@ Magpie 自己读 `plugin-auth.json`（管理登录）、`plugins.json`（插件�
 
 - 不申请、不轮换、不撤销你的 API Key。
 - 不改你的 SenseNova 账号设置。
-- 不读、不记录、不转发你的模型请求内容——只改写 `authorization` 一个头，body 原样透传给 `token.sensenova.cn`（代码见第 7 条）。
+- 不读、不记录、不转发你的模型请求内容——只改写 `authorization` 一个头；body 只在内存里做商汤网关 schema 清洗（见 `sanitize.mjs`），即发即弃。
 - 不缓存提示词或响应。
 - 不写 SenseNova 服务端的任何凭据设置。
 - 对 `~/.sensenova-quota.json` 只写自己的按账号条目（`accounts.<账号>`），以及——当它读的就是顶层记录时——CLI 的单账号顶层记录，别的都不碰。
