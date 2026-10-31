@@ -418,6 +418,7 @@ The `options` for this entry in `plugins.json`:
     "baseURL": "https://token.sensenova.cn/v1",
     "quotaTtlMs": 60000,
     "rpmLimit": 2,
+    "throttleMaxWaitMs": 60000,
     "scopeModel": "flash-lite",
     "locale": "auto",
     "credentialsFile": "~/.sensenova-quota.json"
@@ -430,6 +431,7 @@ The `options` for this entry in `plugins.json`:
 | `baseURL` | `https://token.sensenova.cn/v1` | Token Plan address |
 | `quotaTtlMs` | `60000` | How long a quota read is cached. `usage` gets polled; the cache keeps the endpoint from being hammered |
 | `rpmLimit` | `2` | Max requests per account per 60-second window (a local pre-throttle against SenseNova's low per-key RPM); `0` disables it |
+| `throttleMaxWaitMs` | `60000` | How long a pre-throttled request may queue. Past that it answers `503 + Retry-After` so Magpie moves to another account instead of the session appearing to hang |
 | `scopeModel` | `flash-lite` | Which keyword scopes the dedicated pool's models |
 | `locale` | `auto` | `zh`, `en`, or `auto` to follow the machine. See below |
 | `credentialsFile` | `~/.sensenova-quota.json` | Where the console credentials live |
@@ -451,6 +453,11 @@ window — a request that would exceed it is held and queued, avoiding the 429 a
 letting the host back off after the fact; and `maxConcurrency: 2` declared in package.json caps per-account
 concurrency (a limit you set on the provider wins over it). Rotate across accounts plus the pre-throttle is
 equivalent to a multi-key rotation pool.
+
+The queue is bounded: a request that would wait longer than `throttleMaxWaitMs` (60 seconds by default) gives
+up and answers `503 + Retry-After`. That is deliberate — an unbounded queue makes the agent session look
+hung (with the defaults, the last of ten concurrent requests would wait four minutes), while a 503 is
+exactly the signal Magpie uses to move to another account or back off.
 
 ### `locale`
 

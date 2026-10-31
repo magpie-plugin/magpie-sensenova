@@ -58,6 +58,21 @@ const REASONING_EFFORT_ALIASES = { off: "none" };
 
 const isRecord = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
 
+/**
+ * The body of a Request, or undefined when it cannot be read.
+ *
+ * `clone()` throws on a body that is already consumed or locked — a condition
+ * this hook must survive, since the only sane answer then is to forward the
+ * call untouched rather than fail a request the host could have sent.
+ */
+async function readSourceBody(source) {
+  try {
+    return await source.clone().text();
+  } catch {
+    return undefined;
+  }
+}
+
 /** Null/missing content for the nullable roles; unchanged otherwise. */
 function normalizeContent(message) {
   if ("content" in message && message.content !== null && message.content !== undefined) {
@@ -196,7 +211,7 @@ export async function rewriteChatBody(input, init, headers) {
     init?.body !== undefined && init.body !== null
       ? init.body
       : source?.body
-        ? await source.clone().text()
+        ? await readSourceBody(source)
         : undefined;
   if (typeof raw !== "string" || !raw) return null;
   let parsed;

@@ -45,6 +45,8 @@ const DEFAULT_QUOTA_TTL_MS = 60_000;
 /** 商换单把 Key 的 RPM 上限很低（实测约 3），默认按 2 预限流留出余量。 */
 const DEFAULT_RPM_LIMIT = 2;
 const RPM_WINDOW_MS = 60_000;
+/** 预限流排队最多等多久，超过就回 503 交给 Magpie 换账号。 */
+const DEFAULT_THROTTLE_MAX_WAIT_MS = 60_000;
 
 /**
  * Build the plugin.
@@ -64,6 +66,9 @@ export async function SenseNovaPlugin({ client } = {}, options = {}) {
     // `0` 关闭预限流。rpmWindowMs 是测试接缝，生产恒为 60 秒。
     rpmLimit: Number(options.rpmLimit ?? DEFAULT_RPM_LIMIT) || 0,
     rpmWindowMs: Number(options.rpmWindowMs) > 0 ? Number(options.rpmWindowMs) : RPM_WINDOW_MS,
+    // 排队上限：等超过这个时长就回 503，别把 Agent 会话吊死。
+    throttleMaxWaitMs:
+      Number(options.throttleMaxWaitMs) > 0 ? Number(options.throttleMaxWaitMs) : DEFAULT_THROTTLE_MAX_WAIT_MS,
   };
   const catalog = createCatalog({ baseURL: opts.baseURL });
 
@@ -262,44 +267,89 @@ export async function SenseNovaPlugin({ client } = {}, options = {}) {
         const key = apiKeyOf(await readAuth(getAuth));
         // 本账号在当前窗口内的发送时刻。loader 每账号各跑一次，闭包就是天然的按账号状态。
         let sent = [];
+        let loggedRewrite = false;
         const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
         /**
          * 本地 RPM 预限流：窗口打满就把请求 hold 到最早一次发送滑出窗口再发。
          * Magpie 的 Failover 是被动的（429 发生后才让账号退避），这里是主动排队，
          * 配合多账号「轮流」路由把每把 Key 压在 RPM 红线内，让 429 基本不发生。
+         *
+         * 排队有上限：无上限的等待会把 Agent 会话拖成假死（rpmLimit=2、窗口 60 秒时，
+         * 十个并发里最后一个要等四分钟）。超过 `throttleMaxWaitMs` 就放弃等待，
+         * 交给调用方回 503 + Retry-After —— 那正是 Magpie 换账号或退避的信号。
+         *
+         * @returns {Promise<{ok: true} | {ok: false, retryAfterMs: number}>}
          */
         const throttle = async () => {
-          if (!opts.rpmLimit) return;
+          if (!opts.rpmLimit) return { ok: true };
+          const deadline = Date.now() + opts.throttleMaxWaitMs;
           for (;;) {
             const now = Date.now();
             sent = sent.filter((at) => now - at < opts.rpmWindowMs);
             if (sent.length < opts.rpmLimit) {
               sent.push(now);
-              return;
+              return { ok: true };
             }
-            await wait(sent[0] + opts.rpmWindowMs - now);
+            const freeAt = sent[0] + opts.rpmWindowMs;
+            if (freeAt > deadline) return { ok: false, retryAfterMs: freeAt - now };
+            await wait(freeAt - now);
           }
         };
         return {
           baseURL: opts.baseURL ?? "https://token.sensenova.cn/v1",
           apiKey: key,
           async fetch(input, init) {
-            await throttle();
+            const gate = await throttle();
+            if (!gate.ok) {
+              const seconds = Math.max(1, Math.ceil(gate.retryAfterMs / 1000));
+              log("warn", `sensenova: local RPM queue is full, answering 503 (retry in ${seconds}s)`);
+              return new Response(
+                JSON.stringify({
+                  error: {
+                    message: `SenseNova key is at its local request limit; retry in ${seconds}s`,
+                    type: "rate_limit_error",
+                  },
+                }),
+                {
+                  status: 503,
+                  headers: { "content-type": "application/json", "retry-after": String(seconds) },
+                }
+              );
+            }
             // Re-read per request so a sign-in that changes mid-session is
             // picked up without waiting for the loader to re-run.
             const current = apiKeyOf(await readAuth(getAuth));
             const source = input instanceof Request ? input : null;
-            const headers = new Headers(init?.headers ?? source?.headers);
+            // A Request carries its own headers; init's are layered on top rather
+            // than replacing them, or the Request's content-type would vanish.
+            const headers = new Headers(source?.headers);
+            if (init?.headers) {
+              new Headers(init.headers).forEach((value, name) => headers.set(name, value));
+            }
             if (current === undefined) headers.delete("authorization");
             else headers.set("authorization", `Bearer ${current}`);
             const clean = await rewriteChatBody(input, init, headers);
             if (clean) {
-              log("info", `sensenova: rewrote ${clean.changes.join(", ")} for the gateway`);
+              // Once per account is enough to know the layer is active; per-request
+              // logging turns a tool-heavy turn into a wall of identical lines.
+              if (!loggedRewrite) {
+                loggedRewrite = true;
+                log("info", `sensenova: rewrote ${clean.changes.join(", ")} for the gateway`);
+              }
               return fetch(clean.input, clean.init);
             }
             // A Request carries its own body, and re-issuing one by URL alone
-            // silently drops it — so clone it instead of rebuilding the call.
-            if (source) return fetch(new Request(source, { ...init, headers }));
+            // silently drops it — so rebuild it instead of dropping the call.
+            // A body the host already consumed cannot be rebuilt at all; then
+            // the URL alone is the only thing left to forward, and a controlled
+            // upstream error beats an exception thrown out of this hook.
+            if (source) {
+              try {
+                return fetch(new Request(source, { ...init, headers }));
+              } catch {
+                return fetch(source.url, { ...init, headers });
+              }
+            }
             return fetch(input, { ...init, headers });
           },
         };

@@ -302,6 +302,7 @@ snquota login --username <你的账号> --password <你的密码> --save-passwor
     "baseURL": "https://token.sensenova.cn/v1",
     "quotaTtlMs": 60000,
     "rpmLimit": 2,
+    "throttleMaxWaitMs": 60000,
     "scopeModel": "flash-lite",
     "locale": "auto",
     "credentialsFile": "~/.sensenova-quota.json"
@@ -314,6 +315,7 @@ snquota login --username <你的账号> --password <你的密码> --save-passwor
 | `baseURL` | `https://token.sensenova.cn/v1` | Token Plan 地址 |
 | `quotaTtlMs` | `60000` | 额度读数缓存多久。`usage` 会被轮询，缓存防止接口被打爆 |
 | `rpmLimit` | `2` | 每账号每 60 秒最多发出的请求数（本地预限流，避开商汤单把 Key 的低 RPM 上限）；`0` 关闭 |
+| `throttleMaxWaitMs` | `60000` | 预限流排队最多等多久。超过就回 `503 + Retry-After` 交给 Magpie 换账号，避免把会话吊死 |
 | `scopeModel` | `flash-lite` | 专属池用哪个关键词限定模型 |
 | `locale` | `auto` | `zh`、`en`，或 `auto` 跟随机器。见下 |
 | `credentialsFile` | `~/.sensenova-quota.json` | 控制台凭据的位置 |
@@ -327,6 +329,8 @@ snquota login --username <你的账号> --password <你的密码> --save-passwor
 3. 被 429 的账号 Magpie 自动让开并退避（有 `Retry-After` 按它来），并在回复**首字节前**换下一个账号重试，Agent 无感。
 
 插件侧配合两件事：`rpmLimit`（默认 2）按 60 秒窗口本地预限流，窗口打满就把请求 hold 住排队，从源头避开 429，而不是挨打后靠宿主退避；package.json 声明的 `maxConcurrency: 2` 限制单账号并发（provider 上的设置可覆盖它）。多账号「轮流」+ 预限流，等效于一个多 Key 轮换池。
+
+排队有上限：等超过 `throttleMaxWaitMs`（默认 60 秒）就放弃等待，回 `503 + Retry-After`。这是有意的——无上限排队会让 Agent 会话看起来像卡死（默认参数下，十个并发里最后一个要等四分钟），而 503 正是 Magpie 换账号或退避的信号。
 
 ### `locale`
 

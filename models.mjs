@@ -159,10 +159,14 @@ export function normalizeModel(raw) {
       list(raw.input_modalities ?? raw.inputModalities) ?? fallback?.inputModalities ?? ["text"],
     outputModalities:
       list(raw.output_modalities ?? raw.outputModalities) ?? fallback?.outputModalities ?? ["text"],
+    // Only a real boolean counts. The gateway has been seen to send `tool_call`
+    // as an object, and a truthy object would fail `=== true` downstream — the
+    // model would be declared as not supporting tools and tool calls would
+    // silently stop working.
     supportsTools:
-      raw.supports_tools ??
-      raw.supportsTools ??
-      raw.tool_call ??
+      bool(raw.supports_tools) ??
+      bool(raw.supportsTools) ??
+      bool(raw.tool_call) ??
       has("tools") ??
       fallback?.supportsTools ??
       true,
