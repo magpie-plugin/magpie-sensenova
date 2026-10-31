@@ -50,6 +50,7 @@
     "test": "node --test test/*.test.mjs"
   },
   "magpie": {
+    "name": "商汤日日新",
     "icon": "https://platform.sensenova.cn/favicon.ico",
     "maxConcurrency": 2
   }
