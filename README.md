@@ -301,6 +301,7 @@ snquota login --username <你的账号> --password <你的密码> --save-passwor
   "options": {
     "baseURL": "https://token.sensenova.cn/v1",
     "quotaTtlMs": 60000,
+    "rpmLimit": 2,
     "scopeModel": "flash-lite",
     "locale": "auto",
     "credentialsFile": "~/.sensenova-quota.json"
@@ -312,9 +313,20 @@ snquota login --username <你的账号> --password <你的密码> --save-passwor
 | --- | --- | --- |
 | `baseURL` | `https://token.sensenova.cn/v1` | Token Plan 地址 |
 | `quotaTtlMs` | `60000` | 额度读数缓存多久。`usage` 会被轮询，缓存防止接口被打爆 |
+| `rpmLimit` | `2` | 每账号每 60 秒最多发出的请求数（本地预限流，避开商汤单把 Key 的低 RPM 上限）；`0` 关闭 |
 | `scopeModel` | `flash-lite` | 专属池用哪个关键词限定模型 |
 | `locale` | `auto` | `zh`、`en`，或 `auto` 跟随机器。见下 |
 | `credentialsFile` | `~/.sensenova-quota.json` | 控制台凭据的位置 |
+
+### 多把 Key（摊薄 RPM）
+
+商汤免费档每账号最多 20 个 API Key，但单把 Key 的 RPM 上限很低（实测约 3）。轮换不需要插件内置——Magpie 原生支持：
+
+1. 控制台多开几把 Key，在 Magpie 里对 SenseNova **逐把登录**（每把 Key 一个账号行，各自的积分额度由本插件的 `usage` 钩子显示）；
+2. 展开供应商行勾选全部账号，路由选「**轮流**」——每轮交给下一个账号，均摊负载；
+3. 被 429 的账号 Magpie 自动让开并退避（有 `Retry-After` 按它来），并在回复**首字节前**换下一个账号重试，Agent 无感。
+
+插件侧配合两件事：`rpmLimit`（默认 2）按 60 秒窗口本地预限流，窗口打满就把请求 hold 住排队，从源头避开 429，而不是挨打后靠宿主退避；package.json 声明的 `maxConcurrency: 2` 限制单账号并发（provider 上的设置可覆盖它）。多账号「轮流」+ 预限流，等效于一个多 Key 轮换池。
 
 ### `locale`
 

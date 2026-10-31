@@ -417,6 +417,7 @@ The `options` for this entry in `plugins.json`:
   "options": {
     "baseURL": "https://token.sensenova.cn/v1",
     "quotaTtlMs": 60000,
+    "rpmLimit": 2,
     "scopeModel": "flash-lite",
     "locale": "auto",
     "credentialsFile": "~/.sensenova-quota.json"
@@ -428,9 +429,28 @@ The `options` for this entry in `plugins.json`:
 | --- | --- | --- |
 | `baseURL` | `https://token.sensenova.cn/v1` | Token Plan address |
 | `quotaTtlMs` | `60000` | How long a quota read is cached. `usage` gets polled; the cache keeps the endpoint from being hammered |
+| `rpmLimit` | `2` | Max requests per account per 60-second window (a local pre-throttle against SenseNova's low per-key RPM); `0` disables it |
 | `scopeModel` | `flash-lite` | Which keyword scopes the dedicated pool's models |
 | `locale` | `auto` | `zh`, `en`, or `auto` to follow the machine. See below |
 | `credentialsFile` | `~/.sensenova-quota.json` | Where the console credentials live |
+
+### Multiple keys (spreading the RPM)
+
+SenseNova's free tier allows up to 20 API keys per account, but each key's RPM ceiling is low (about 3,
+measured). Rotation does not need to live in the plugin — Magpie supports it natively:
+
+1. Create extra keys in the console and sign in to SenseNova once per key in Magpie (each key becomes its
+   own account row, with its own credit quota shown by this plugin's `usage` hook).
+2. Expand the provider row, tick every account, and set routing to **rotate** — each turn goes to the next
+   account, spreading the load.
+3. An account that gets 429-ed steps aside automatically (honouring `Retry-After` when present), and the
+   request is retried on the next account **before the first byte** reaches your agent.
+
+The plugin adds two supporting measures: `rpmLimit` (default 2) pre-throttles locally over a 60-second
+window — a request that would exceed it is held and queued, avoiding the 429 at the source instead of
+letting the host back off after the fact; and `maxConcurrency: 2` declared in package.json caps per-account
+concurrency (a limit you set on the provider wins over it). Rotate across accounts plus the pre-throttle is
+equivalent to a multi-key rotation pool.
 
 ### `locale`
 

@@ -50,6 +50,7 @@
     "test": "node --test test/*.test.mjs"
   },
   "magpie": {
-    "icon": "https://platform.sensenova.cn/favicon.ico"
+    "icon": "https://platform.sensenova.cn/favicon.ico",
+    "maxConcurrency": 2
   }
 }

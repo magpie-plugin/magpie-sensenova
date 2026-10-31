@@ -42,6 +42,9 @@ import { fill, resolveLocale, strings as tableFor } from "./i18n.mjs";
 import { rewriteChatBody } from "./sanitize.mjs";
 
 const DEFAULT_QUOTA_TTL_MS = 60_000;
+/** 商换单把 Key 的 RPM 上限很低（实测约 3），默认按 2 预限流留出余量。 */
+const DEFAULT_RPM_LIMIT = 2;
+const RPM_WINDOW_MS = 60_000;
 
 /**
  * Build the plugin.
@@ -58,6 +61,9 @@ export async function SenseNovaPlugin({ client } = {}, options = {}) {
     quotaTtlMs: Number(options.quotaTtlMs) > 0 ? Number(options.quotaTtlMs) : DEFAULT_QUOTA_TTL_MS,
     scopeModel: typeof options.scopeModel === "string" ? options.scopeModel : "flash-lite",
     credentialsFile: options.credentialsFile ?? undefined,
+    // `0` 关闭预限流。rpmWindowMs 是测试接缝，生产恒为 60 秒。
+    rpmLimit: Number(options.rpmLimit ?? DEFAULT_RPM_LIMIT) || 0,
+    rpmWindowMs: Number(options.rpmWindowMs) > 0 ? Number(options.rpmWindowMs) : RPM_WINDOW_MS,
   };
   const catalog = createCatalog({ baseURL: opts.baseURL });
 
@@ -254,10 +260,31 @@ export async function SenseNovaPlugin({ client } = {}, options = {}) {
        */
       async loader(getAuth) {
         const key = apiKeyOf(await readAuth(getAuth));
+        // 本账号在当前窗口内的发送时刻。loader 每账号各跑一次，闭包就是天然的按账号状态。
+        let sent = [];
+        const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+        /**
+         * 本地 RPM 预限流：窗口打满就把请求 hold 到最早一次发送滑出窗口再发。
+         * Magpie 的 Failover 是被动的（429 发生后才让账号退避），这里是主动排队，
+         * 配合多账号「轮流」路由把每把 Key 压在 RPM 红线内，让 429 基本不发生。
+         */
+        const throttle = async () => {
+          if (!opts.rpmLimit) return;
+          for (;;) {
+            const now = Date.now();
+            sent = sent.filter((at) => now - at < opts.rpmWindowMs);
+            if (sent.length < opts.rpmLimit) {
+              sent.push(now);
+              return;
+            }
+            await wait(sent[0] + opts.rpmWindowMs - now);
+          }
+        };
         return {
           baseURL: opts.baseURL ?? "https://token.sensenova.cn/v1",
           apiKey: key,
           async fetch(input, init) {
+            await throttle();
             // Re-read per request so a sign-in that changes mid-session is
             // picked up without waiting for the loader to re-run.
             const current = apiKeyOf(await readAuth(getAuth));
