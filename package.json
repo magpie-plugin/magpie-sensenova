@@ -1,0 +1,54 @@
+{
+  "name": "magpie-sensenova",
+  "version": "0.1.0",
+  "description": "Magpie provider plugin for the SenseNova API (商量 / 日日新 Token Plan, platform.sensenova.cn): OpenAI-compatible Token Plan models plus the console's credit quota as native Magpie quota windows. Not the consumer app 商汤小浣熊",
+  "type": "module",
+  "main": "./index.mjs",
+  "exports": {
+    ".": "./index.mjs"
+  },
+  "files": [
+    "index.mjs",
+    "internal.mjs",
+    "quota.mjs",
+    "models.mjs",
+    "i18n.mjs",
+    "assets/",
+    "README.md",
+    "README.en.md",
+    "NOTICE.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "magpie",
+    "magpie-plugin",
+    "opencode",
+    "opencode-plugin",
+    "opencode-auth",
+    "sensenova",
+    "商汤",
+    "日日新",
+    "token-plan",
+    "openai-compatible",
+    "sensetime",
+    "raccoon"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aqiu817/magpie-sensenova.git"
+  },
+  "homepage": "https://github.com/aqiu817/magpie-sensenova#readme",
+  "bugs": {
+    "url": "https://github.com/aqiu817/magpie-sensenova/issues"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "magpie": {
+    "icon": "https://platform.sensenova.cn/favicon.ico"
+  }
+}
