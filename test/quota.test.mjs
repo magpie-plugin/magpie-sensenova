@@ -216,6 +216,7 @@ test("toConfigModel / toProviderModel 形状符合 Magpie 约定", () => {
     "name",
     "reasoning",
     "tool_call",
+    "variants",
   ]);
   assert.equal(cfgModel.attachment, true, "Flash-Lite 支持图片输入");
 
@@ -349,11 +350,16 @@ test("内置快照的数字与接口实际返回一致", () => {
   }
 });
 
-test("没有档位可调时不编造 variants", () => {
-  // Magpie 的「推理强度」是 variants（以档位为键的选项对象）。SenseNova 的接口只
-  // 声明 temperature / stop 两个采样参数，没有 effort，所以这里必须是空的。
+test("responses 协议下不编造 variants", () => {
+  // 官方 Responses 兼容端点通篇未提推理控制，那里没有可选档位。chat 端官方
+  // 参数表明确支持 reasoning_effort（low/medium/high/max/none），因此 chat 下
+  // reasoning 模型带 5 档 —— 旧断言「variants 必须为空」的立论已被官方文档推翻。
   const m = normalizeModel({ id: "kimi-k3", supported_features: ["tools", "reasoning"] });
-  assert.deepEqual(toProviderModel(m, "sensenova").variants, {});
+  assert.deepEqual(toProviderModel(m, "sensenova", { protocol: "responses" }).variants, {});
+  assert.deepEqual(
+    Object.keys(toProviderModel(m, "sensenova", { protocol: "chat" }).variants),
+    ["none", "low", "medium", "high", "max"]
+  );
 });
 
 test("实测的输出上限覆盖目录里的 max_output_length", () => {

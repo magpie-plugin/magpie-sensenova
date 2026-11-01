@@ -315,8 +315,42 @@ function modalityFlags(modalities) {
   };
 }
 
+/**
+ * 推理档位到 provider 选项的映射，按协议分别取官方口径。
+ *
+ * - **chat**：官方参数表给 `reasoning_effort: low | medium | high | max`，
+ *   `none` 关闭思考。实测报错原文还认 `minimal` / `xhigh`，但文档表格没有它们
+ *   ——两处官方口径打架时取交集，档位选择器里只放两边都认的值。
+ * - **anthropic**：官方口径 `output_config.effort: low | medium | high | xhigh | max`，
+ *   `none` 由 `thinking: {type: "disabled"}` 实现。
+ * - **responses**：官方文档通篇未提推理控制（无状态兼容端点），不给档位。
+ *
+ * @param {"chat"|"anthropic"|"responses"} protocol
+ * @returns {object|undefined} undefined 表示该协议没有可选档位。
+ */
+export function effortVariants(protocol) {
+  if (protocol === "chat") {
+    return Object.fromEntries(
+      ["none", "low", "medium", "high", "max"].map((effort) => [effort, { reasoningEffort: effort }])
+    );
+  }
+  if (protocol === "anthropic") {
+    return {
+      none: { thinking: { type: "disabled" } },
+      ...Object.fromEntries(
+        ["low", "medium", "high", "xhigh", "max"].map((effort) => [
+          effort,
+          { thinking: { type: "enabled" }, output_config: { effort } },
+        ])
+      ),
+    };
+  }
+  return undefined;
+}
+
 /** The `config` entry declaring one model. */
-export function toConfigModel(m) {
+export function toConfigModel(m, protocol = "chat") {
+  const variants = m.reasoning === true ? effortVariants(protocol) : undefined;
   return {
     name: m.name,
     reasoning: m.reasoning === true,
@@ -324,11 +358,13 @@ export function toConfigModel(m) {
     attachment: hasNonTextInput(m),
     modalities: { input: m.inputModalities, output: m.outputModalities },
     limit: { context: m.contextLength, output: m.maxCompletionTokens },
+    ...(variants ? { variants } : {}),
   };
 }
 
 /** The `provider.models` entry for one model. */
-export function toProviderModel(m, providerID, { baseURL = DEFAULT_BASE_URL, npm = NPM } = {}) {
+export function toProviderModel(m, providerID, { baseURL = DEFAULT_BASE_URL, npm = NPM, protocol = "chat" } = {}) {
+  const variants = m.reasoning === true ? effortVariants(protocol) : undefined;
   return {
     id: m.id,
     providerID,
@@ -349,6 +385,6 @@ export function toProviderModel(m, providerID, { baseURL = DEFAULT_BASE_URL, npm
       interleaved: false,
     },
     release_date: "",
-    variants: {},
+    variants: variants ?? {},
   };
 }

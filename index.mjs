@@ -97,7 +97,7 @@ export async function SenseNovaPlugin({ client } = {}, options = {}) {
 
   const seedModels = () => catalog.peek() ?? FALLBACK_MODELS;
   const modelsAsConfig = (models) =>
-    Object.fromEntries(models.map((m) => [m.id, toConfigModel(m)]));
+    Object.fromEntries(models.map((m) => [m.id, toConfigModel(m, opts.protocol)]));
 
   /**
    * The credentials for one account.
@@ -259,7 +259,7 @@ export async function SenseNovaPlugin({ client } = {}, options = {}) {
           return Object.fromEntries(
             live.map((m) => [
               m.id,
-              toProviderModel(m, id, { baseURL: endpointOf(), npm: wire.npm }),
+              toProviderModel(m, id, { baseURL: endpointOf(), npm: wire.npm, protocol: opts.protocol }),
             ])
           );
         } catch (error) {

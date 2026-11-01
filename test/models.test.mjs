@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { mergeModelConfigs } from "../models.mjs";
+import { mergeModelConfigs, effortVariants, toConfigModel, toProviderModel } from "../models.mjs";
 import { SenseNovaPlugin } from "../index.mjs";
 
 test("mergeModelConfigs：单字段覆盖只改该字段", () => {
@@ -75,3 +75,43 @@ test("anthropic 协议下 chat 形状的 body 不被改写（发送原样）", a
   }
   assert.equal(sentBody, JSON.stringify({ messages: [{ role: "developer", content: "hi" }] }));
 });
+
+test("chat 档位：官方 5 档映射 reasoningEffort，争议值不入列", () => {
+  const v = effortVariants("chat");
+  assert.deepEqual(Object.keys(v), ["none", "low", "medium", "high", "max"]);
+  assert.deepEqual(v.none, { reasoningEffort: "none" });
+  assert.deepEqual(v.high, { reasoningEffort: "high" });
+});
+
+test("anthropic 档位：none 关思考，其余走 output_config.effort", () => {
+  const v = effortVariants("anthropic");
+  assert.deepEqual(v.none, { thinking: { type: "disabled" } });
+  assert.deepEqual(v.high, { thinking: { type: "enabled" }, output_config: { effort: "high" } });
+  assert.deepEqual(Object.keys(v), ["none", "low", "medium", "high", "xhigh", "max"]);
+});
+
+test("responses 无档位（官方未提供推理控制）", () => {
+  assert.equal(effortVariants("responses"), undefined);
+});
+
+test("模型条目带档位；reasoning: false 的模型不带", () => {
+  const reasoning = { id: "m", name: "M", reasoning: true, supportsTools: true };
+  assert.ok(toConfigModel(reasoning, "chat").variants);
+  assert.deepEqual(toConfigModel(reasoning, "responses").variants, undefined);
+  assert.deepEqual(toProviderModel(reasoning, "p", { protocol: "anthropic" }).variants.none, {
+    thinking: { type: "disabled" },
+  });
+
+  const plain = { id: "p", name: "P", reasoning: false, supportsTools: true };
+  assert.equal(toConfigModel(plain, "chat").variants, undefined);
+  assert.deepEqual(toProviderModel(plain, "p", { protocol: "chat" }).variants, {});
+});
+
+test("config 钩子的模型声明按 protocol 带档位", async () => {
+  const plugin = await SenseNovaPlugin({}, { protocol: "anthropic" });
+  const cfg = {};
+  await plugin.config(cfg);
+  const entry = cfg.provider.sensenova.models["kimi-k3"];
+  assert.deepEqual(entry.variants.none, { thinking: { type: "disabled" } });
+});
+

@@ -599,13 +599,17 @@ requests for the alias fail every time. It used to sit in the output-limits tabl
 number was always `deepseek-flash`'s. `extractModels` now filters it out; if the platform ever makes the
 alias work, delete one line from `UNUSABLE_IDS`.
 
-**Reasoning effort.** Magpie expresses selectable effort levels as `variants` — a map from level names
-(`low`/`high`/`xhigh`/`max`…) to the provider options for that level; other providers' entries in
-`plugin-providers.json` carry them. SenseNova declares none: `/v1/models` lists only `temperature` and
-`stop`
-under `supported_sampling_parameters`, and its features are just `tools` / `json_mode` / `reasoning`. So
-this plugin reports `reasoning: true` (the models do think) and **`variants: {}` — no effort selector**,
-because there is nothing to select. If the platform later exposes one, `variants` is where it goes.
+**Reasoning effort.** Magpie expresses selectable effort levels as `variants` — a map from level names to
+the provider options for that level. The official docs do support reasoning control (the `reasoning_effort`
+parameter), so reasoning models carry an effort selector:
+
+- **chat**: `none` / `low` / `medium` / `high` / `max` — the full list from the official parameter table,
+  mapped to `reasoning_effort`. The measured gateway error also accepts `minimal` / `xhigh`, but the docs
+  table does not; where the two official wordings disagree this plugin takes the intersection, so the
+  selector only offers values both accept.
+- **anthropic**: `none` (mapped to `thinking: {type: "disabled"}`) plus `low` / `medium` / `high` /
+  `xhigh` / `max` (mapped to `output_config.effort`, the official list verbatim).
+- **responses**: no levels — the official docs never mention reasoning control on that endpoint.
 
 A live list is used when available; otherwise the plugin falls back and marks the list with Magpie's
 fallback flag. Magpie also merges its own models.dev entry for `sensenova`, which is where

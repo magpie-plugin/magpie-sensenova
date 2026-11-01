@@ -422,7 +422,13 @@ magpie plugin options sensenova '{"locale":"en"}'
 
 **另一个刻意不列出的是 `deepseek-v4.1-flash`。** `/v1/models` 会同时吐出它和 `deepseek-flash`，但两者是同一个模型（V4.1 Flash，官方模型总览里 market 名对应的 wire id 就是 `deepseek-flash`），而 chat 端点只认 `deepseek-flash`——别名每次请求都失败。它曾被记进输出上限表（393,216），那个数字本来就是 `deepseek-flash` 的；`extractModels` 现在把它过滤掉，平台哪天让别名可用，从 `UNUSABLE_IDS` 里删一行即可。
 
-**推理强度。** Magpie 用 `variants` 表示可选档位——从档位名（`low`/`high`/`xhigh`/`max`…）到该档 provider 选项的映射；其它供应商在 `plugin-providers.json` 的条目里有。SenseNova 不声明：`/v1/models` 的 `supported_sampling_parameters` 只列了 `temperature` 和 `stop`，特性也就是 `tools` / `json_mode` / `reasoning`。所以本插件报 `reasoning: true`（模型确实会思考）、**`variants: {}`——没有档位选择器**，因为没东西可选。平台将来暴露了，就往 `variants` 里放。
+**推理强度。** Magpie 用 `variants` 表示可选档位——从档位名到该档 provider 选项的映射。官方文档明确支持推理控制（`reasoning_effort` 参数），因此 reasoning 模型带档位选择器：
+
+- **chat**：`none` / `low` / `medium` / `high` / `max`（官方参数表的完整列表，映射到 `reasoning_effort`）。实测报错原文还认 `minimal` / `xhigh`，但文档表格没有——两处官方口径打架时取交集，选择器里只放两边都认的值。
+- **anthropic**：`none`（映射 `thinking: {type: "disabled"}`）+ `low` / `medium` / `high` / `xhigh` / `max`（映射 `output_config.effort`，官方列表原样）。
+- **responses**：无档位——官方文档通篇未提该端点的推理控制。
+
+`sanitize.mjs` 会把未知/非法的 `reasoning_effort` 值摘掉而不是发出去撞 400，所以即使网关对某模型收紧了档位，选错的后果也只是「没有思考」而不是请求失败。
 
 有实时清单就用实时清单；否则插件回落并打上 Magpie 的回落标记。Magpie 还会合并它自己 models.dev 里的 `sensenova` 条目，`deepseek-v4-pro` 出现时就是从那来的。
 
