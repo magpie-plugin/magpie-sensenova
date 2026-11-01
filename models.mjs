@@ -59,11 +59,21 @@ export const DEFAULT_REFRESH_HOURS = 6;
  */
 export const MEASURED_OUTPUT_LIMITS = {
   "deepseek-flash": 393216,
-  "deepseek-v4.1-flash": 393216,
   "deepseek-v4-flash": 384000,
   "glm-5.2": 131072,
   "sensenova-6.8-flash-lite": 65536,
 };
+
+/**
+ * Ids that `/v1/models` advertises but the chat endpoint refuses.
+ *
+ * `deepseek-v4.1-flash` is a dead alias of `deepseek-flash` — the same model,
+ * V4.1 Flash, under its marketing name — and asking the chat endpoint for it
+ * fails every time. Listing it only hands the user a model that cannot work,
+ * so it is filtered out the same way the image-only U1.5 models are. Drop it
+ * from here if the platform ever makes the alias answer.
+ */
+const UNUSABLE_IDS = new Set(["deepseek-v4.1-flash"]);
 
 /**
  * Fallbacks for a model the endpoint described without a context or output
@@ -212,7 +222,9 @@ export function extractModels(payload) {
       : Array.isArray(payload?.models)
         ? payload.models
         : [];
-  return rows.map(normalizeModel).filter((m) => m !== null && writesText(m));
+  return rows
+    .map(normalizeModel)
+    .filter((m) => m !== null && writesText(m) && !UNUSABLE_IDS.has(m.id));
 }
 
 /**

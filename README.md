@@ -405,7 +405,6 @@ magpie plugin options sensenova '{"locale":"en"}'
 | 模型 | 上下文 | 最大输出 | 输入 | 特性 |
 | --- | --- | --- | --- | --- |
 | `deepseek-flash` | 1,048,576 | **393,216** | 文本 | tools, json_mode, reasoning |
-| `deepseek-v4.1-flash` | 1,048,576 | **393,216** | 文本 | tools, json_mode, reasoning |
 | `deepseek-v4-flash` | 1,048,576 | **384,000** | 文本 | tools, json_mode, reasoning |
 | `glm-5.2` | 1,048,576 | 131,072 | 文本 | tools, json_mode, reasoning |
 | `kimi-k3` | 1,048,576 | 65,536 | 文本 | tools, json_mode, reasoning |
@@ -420,6 +419,8 @@ magpie plugin options sensenova '{"locale":"en"}'
 `kimi-k3` 是唯一仍取目录值的一行，因为探测它一直回 `429 inference exceeds tpm/rpm limit` 而不是区间。它的 65,536 当目录的说法对待，不是测量。
 
 **有一个模型刻意不列出。** `/v1/models` 还提供 `sensenova-u1.5-lite`，但它的 `output_modalities` 是 `["image"]`——画信息图的——而 `chat/completions` 对它回 `404 model is not found`。本插件只服务对话，所以按「会写文本」过滤清单；在 选择器里提供它只会产生一个用户解释不了的错误。
+
+**另一个刻意不列出的是 `deepseek-v4.1-flash`。** `/v1/models` 会同时吐出它和 `deepseek-flash`，但两者是同一个模型（V4.1 Flash，官方模型总览里 market 名对应的 wire id 就是 `deepseek-flash`），而 chat 端点只认 `deepseek-flash`——别名每次请求都失败。它曾被记进输出上限表（393,216），那个数字本来就是 `deepseek-flash` 的；`extractModels` 现在把它过滤掉，平台哪天让别名可用，从 `UNUSABLE_IDS` 里删一行即可。
 
 **推理强度。** Magpie 用 `variants` 表示可选档位——从档位名（`low`/`high`/`xhigh`/`max`…）到该档 provider 选项的映射；其它供应商在 `plugin-providers.json` 的条目里有。SenseNova 不声明：`/v1/models` 的 `supported_sampling_parameters` 只列了 `temperature` 和 `stop`，特性也就是 `tools` / `json_mode` / `reasoning`。所以本插件报 `reasoning: true`（模型确实会思考）、**`variants: {}`——没有档位选择器**，因为没东西可选。平台将来暴露了，就往 `variants` 里放。
 

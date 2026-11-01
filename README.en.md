@@ -563,7 +563,6 @@ the current lineup:
 | model | context | max output | input | features |
 | --- | --- | --- | --- | --- |
 | `deepseek-flash` | 1,048,576 | **393,216** | text | tools, json_mode, reasoning |
-| `deepseek-v4.1-flash` | 1,048,576 | **393,216** | text | tools, json_mode, reasoning |
 | `deepseek-v4-flash` | 1,048,576 | **384,000** | text | tools, json_mode, reasoning |
 | `glm-5.2` | 1,048,576 | 131,072 | text | tools, json_mode, reasoning |
 | `kimi-k3` | 1,048,576 | 65,536 | text | tools, json_mode, reasoning |
@@ -592,6 +591,13 @@ a measurement.
 `output_modalities` is `["image"]` — it draws infographics — and `chat/completions` answers it with
 `404 model is not found`. This plugin only serves chat, so it filters the list on "writes text"; offering
 that model in a picker would only produce an error the user cannot explain.
+
+**Another one deliberately not listed is `deepseek-v4.1-flash`.** `/v1/models` advertises it alongside
+`deepseek-flash`, but they are the same model (V4.1 Flash — the platform's own model overview maps that
+marketing name to the wire id `deepseek-flash`), and the chat endpoint only answers `deepseek-flash` —
+requests for the alias fail every time. It used to sit in the output-limits table (393,216), but that
+number was always `deepseek-flash`'s. `extractModels` now filters it out; if the platform ever makes the
+alias work, delete one line from `UNUSABLE_IDS`.
 
 **Reasoning effort.** Magpie expresses selectable effort levels as `variants` — a map from level names
 (`low`/`high`/`xhigh`/`max`…) to the provider options for that level; other providers' entries in

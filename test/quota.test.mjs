@@ -383,3 +383,15 @@ test("写不出文本的模型不进对话模型清单", () => {
   // 没有 output_modalities 时按文本处理，不能把老形状全过滤掉。
   assert.deepEqual(extractModels([{ id: "unknown" }]).map((m) => m.id), ["unknown"]);
 });
+
+test("deepseek-v4.1-flash 死别名不进清单", () => {
+  // /v1/models 会同时吐出 deepseek-v4.1-flash 和 deepseek-flash，两者是同一个
+  // 模型（V4.1 Flash），但 chat 端点只认 deepseek-flash，别名每次都失败。
+  const payload = {
+    data: [
+      { id: "deepseek-v4.1-flash", output_modalities: ["text"] },
+      { id: "deepseek-flash", output_modalities: ["text"] },
+    ],
+  };
+  assert.deepEqual(extractModels(payload).map((m) => m.id), ["deepseek-flash"]);
+});
