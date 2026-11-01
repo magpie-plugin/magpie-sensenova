@@ -14,11 +14,27 @@
  * @module magpie-sensenova/models
  */
 
-/** The AI SDK package that speaks the OpenAI-compatible dialect. */
-export const NPM = "@ai-sdk/openai-compatible";
+/**
+ * Token Plan 的网关在同一 origin 上讲三种 wire API：OpenAI Chat Completions、
+ * Anthropic Messages、OpenAI Responses。`protocol` 选项选其一；默认 `chat`。
+ *
+ * `base` 是 SDK 在其后拼接自己路径的地址，所以 anthropic 是 origin 根（SDK 拼
+ * `/v1/messages`），另外两个是 `/v1`（SDK 拼 `/chat/completions` 或
+ * `/responses`）。magpie 网关每协议都会转换 agent 发来的请求，多协议的价值
+ * 在于 Claude Code 这类原生走 Anthropic Messages 的 agent 可以直连，绕过
+ * magpie 自己的转换层。
+ */
+export const PROTOCOLS = {
+  chat: { npm: "@ai-sdk/openai-compatible", base: "https://token.sensenova.cn/v1" },
+  anthropic: { npm: "@ai-sdk/anthropic", base: "https://token.sensenova.cn" },
+  responses: { npm: "@ai-sdk/openai", base: "https://token.sensenova.cn/v1" },
+};
 
-/** Token Plan root. Every request path is appended to it. */
-export const DEFAULT_BASE_URL = "https://token.sensenova.cn/v1";
+/** The AI SDK package that speaks the OpenAI-compatible (chat) dialect. */
+export const NPM = PROTOCOLS.chat.npm;
+
+/** Token Plan root, under the default `chat` protocol. */
+export const DEFAULT_BASE_URL = PROTOCOLS.chat.base;
 
 /** Abandon a catalog fetch after this long so startup is never held open. */
 export const DEFAULT_TIMEOUT_MS = 15000;

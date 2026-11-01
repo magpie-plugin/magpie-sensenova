@@ -29,6 +29,7 @@ import { PROVIDER, ICON, apiKeyOf, consoleAuthOf, fellBack, readAuth } from "./i
 import {
   FALLBACK_MODELS,
   NPM,
+  PROTOCOLS,
   createCatalog,
   mergeModelConfigs,
   toConfigModel,
@@ -67,6 +68,13 @@ export async function SenseNovaPlugin({ client } = {}, options = {}) {
   const t = tableFor(locale);
   const opts = {
     baseURL: options.baseURL ?? undefined,
+    /**
+     * HTTP 协议。商汤 Token Plan 网关在同一 origin 提供 OpenAI Chat、Anthropic
+     * Messages 和 OpenAI Responses；未识别的取值按 `chat` 处理。
+     */
+    protocol: typeof options.protocol === "string" && options.protocol in PROTOCOLS
+      ? options.protocol
+      : "chat",
     quotaTtlMs: Number(options.quotaTtlMs) > 0 ? Number(options.quotaTtlMs) : DEFAULT_QUOTA_TTL_MS,
     scopeModel: typeof options.scopeModel === "string" ? options.scopeModel : "flash-lite",
     credentialsFile: options.credentialsFile ?? undefined,
@@ -214,6 +222,10 @@ export async function SenseNovaPlugin({ client } = {}, options = {}) {
     }
   };
 
+  /** The wire API this instance serves; every npm/base below branches on it. */
+  const wire = PROTOCOLS[opts.protocol];
+  const endpointOf = () => opts.baseURL ?? wire.base;
+
   return {
     /** Declare the provider and its models. */
     config: async (cfg) => {
@@ -221,8 +233,8 @@ export async function SenseNovaPlugin({ client } = {}, options = {}) {
       const was = cfg.provider[PROVIDER] ?? {};
       cfg.provider[PROVIDER] = {
         name: "商汤日日新",
-        npm: NPM,
-        api: opts.baseURL ?? "https://token.sensenova.cn/v1",
+        npm: wire.npm,
+        api: endpointOf(),
         ...was,
         models: mergeModelConfigs(modelsAsConfig(seedModels()), was.models),
       };
@@ -247,7 +259,7 @@ export async function SenseNovaPlugin({ client } = {}, options = {}) {
           return Object.fromEntries(
             live.map((m) => [
               m.id,
-              toProviderModel(m, id, { baseURL: opts.baseURL ?? catalog.baseURL }),
+              toProviderModel(m, id, { baseURL: endpointOf(), npm: wire.npm }),
             ])
           );
         } catch (error) {
@@ -303,7 +315,8 @@ export async function SenseNovaPlugin({ client } = {}, options = {}) {
           }
         };
         return {
-          baseURL: opts.baseURL ?? "https://token.sensenova.cn/v1",
+          baseURL: endpointOf(),
+          apiKey: key,
           apiKey: key,
           async fetch(input, init) {
             const gate = await throttle();
@@ -335,7 +348,11 @@ export async function SenseNovaPlugin({ client } = {}, options = {}) {
             }
             if (current === undefined) headers.delete("authorization");
             else headers.set("authorization", `Bearer ${current}`);
-            const clean = await rewriteChatBody(input, init, headers);
+            // The rewrite rules are written against the Chat Completions shape;
+            // the Anthropic and Responses bodies are different grammars that the
+            // gateway validates differently, so those go out untouched.
+            const clean =
+              opts.protocol === "chat" ? await rewriteChatBody(input, init, headers) : null;
             if (clean) {
               // Once per account is enough to know the layer is active; per-request
               // logging turns a tool-heavy turn into a wall of identical lines.
