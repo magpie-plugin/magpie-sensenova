@@ -253,6 +253,25 @@ export function createCatalog(opts = {}) {
 
 /* --------------------------------------------------------- Magpie 对象形状 */
 
+/**
+ * 逐模型合并用户覆盖。
+ *
+ * 用户在 plugins.json 的 provider 里只覆盖某个模型的一个字段（比如 limit）时，
+ * 该模型的其余默认值、以及别的模型，都应当原样保留。整体展开
+ * `{...defaults, ...user}` 做不到这一点：一个模型条目会整体替换。
+ *
+ * @param {object} defaults - 插件声明的模型条目，以 id 为键。
+ * @param {object} [user] - 用户配置里的覆盖条目。
+ * @returns {object}
+ */
+export function mergeModelConfigs(defaults, user = {}) {
+  const out = { ...defaults };
+  for (const [id, entry] of Object.entries(user)) {
+    out[id] = out[id] ? { ...out[id], ...entry } : entry;
+  }
+  return out;
+}
+
 function hasNonTextInput(m) {
   return (m.inputModalities ?? []).some((modality) => modality !== "text");
 }

@@ -26,7 +26,14 @@
  */
 
 import { PROVIDER, ICON, apiKeyOf, consoleAuthOf, fellBack, readAuth } from "./internal.mjs";
-import { FALLBACK_MODELS, NPM, createCatalog, toConfigModel, toProviderModel } from "./models.mjs";
+import {
+  FALLBACK_MODELS,
+  NPM,
+  createCatalog,
+  mergeModelConfigs,
+  toConfigModel,
+  toProviderModel,
+} from "./models.mjs";
 import {
   accountNameOf,
   credentialSlotOf,
@@ -217,7 +224,7 @@ export async function SenseNovaPlugin({ client } = {}, options = {}) {
         npm: NPM,
         api: opts.baseURL ?? "https://token.sensenova.cn/v1",
         ...was,
-        models: { ...modelsAsConfig(seedModels()), ...(was.models ?? {}) },
+        models: mergeModelConfigs(modelsAsConfig(seedModels()), was.models),
       };
     },
 
