@@ -1,6 +1,6 @@
 {
   "name": "magpie-sensenova",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Magpie provider plugin for the SenseNova API (商量 / 日日新 Token Plan, platform.sensenova.cn): OpenAI-compatible Token Plan models plus the console's credit quota as native Magpie quota windows. Not the consumer app 商汤小浣熊",
   "type": "module",
   "main": "./index.mjs",
